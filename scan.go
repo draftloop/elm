@@ -224,5 +224,16 @@ func convertAssign(dest, src any) error {
 		rv.Set(sv.Convert(rv.Type()))
 		return nil
 	}
+	// Handle integer → bool conversion
+	if sv.IsValid() && rv.Kind() == reflect.Bool {
+		switch sv.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			rv.SetBool(sv.Int() != 0)
+			return nil
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			rv.SetBool(sv.Uint() != 0)
+			return nil
+		}
+	}
 	return fmt.Errorf("elm: cannot assign %T → %T", src, dest)
 }
