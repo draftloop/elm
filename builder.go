@@ -54,6 +54,9 @@ func (w *BuilderWhere) Build() (string, []any) {
 			}
 			return fmt.Sprintf("%s IN (%s)", w.field, strings.Join(placeholders, ", ")), values
 		}
+		if w.operator == "IS NULL" || w.operator == "IS NOT NULL" {
+			return fmt.Sprintf("%s %s", w.field, w.operator), nil
+		}
 		return fmt.Sprintf("%s %s ?", w.field, w.operator), []any{w.value}
 	}
 	var clauses []string
@@ -125,6 +128,14 @@ func Like(field string, value any) BuilderWhere {
 
 func In(field string, values []any) BuilderWhere {
 	return BuilderWhere{kind: "COND", field: field, operator: "IN", value: values}
+}
+
+func IsNull(field string) BuilderWhere {
+	return BuilderWhere{kind: "COND", field: field, operator: "IS NULL"}
+}
+
+func IsNotNull(field string) BuilderWhere {
+	return BuilderWhere{kind: "COND", field: field, operator: "IS NOT NULL"}
 }
 
 func And(and ...BuilderWhere) BuilderWhere {

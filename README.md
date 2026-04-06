@@ -118,6 +118,8 @@ elm.Lt("score", 100)
 elm.LtEq("score", 100)
 elm.Like("username", "ali%")
 elm.In("id", []any{1, 2, 3})
+elm.IsNull("deleted_at")
+elm.IsNotNull("deleted_at")
 
 elm.And(elm.Eq("active", true), elm.Gt("age", 18))
 elm.Or(elm.Eq("role", "admin"), elm.Eq("role", "mod"))
