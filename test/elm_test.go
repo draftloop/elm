@@ -342,3 +342,41 @@ func Test(t *testing.T) {
 		t.Fatalf("unexpected usersWorkPerExcavator[2]: %#v", usersWorkPerExcavator[2])
 	}
 }
+
+func TestAndOrParentheses(t *testing.T) {
+	cases := []struct {
+		name     string
+		where    elm.BuilderWhere
+		expected string
+	}{
+		{
+			name:     "Or wraps in parentheses",
+			where:    elm.Or(elm.Eq("a", 1), elm.Eq("b", 2)),
+			expected: "(a = ? OR b = ?)",
+		},
+		{
+			name:     "And wraps in parentheses",
+			where:    elm.And(elm.Eq("a", 1), elm.Eq("b", 2)),
+			expected: "(a = ? AND b = ?)",
+		},
+		{
+			name:     "Or inside And keeps correct precedence",
+			where:    elm.And(elm.Or(elm.Eq("a", 1), elm.Eq("b", 2)), elm.Eq("c", 3)),
+			expected: "((a = ? OR b = ?) AND c = ?)",
+		},
+		{
+			name:     "And inside Or keeps correct precedence",
+			where:    elm.Or(elm.And(elm.Eq("a", 1), elm.Eq("b", 2)), elm.Eq("c", 3)),
+			expected: "((a = ? AND b = ?) OR c = ?)",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := tc.where.Build()
+			if got != tc.expected {
+				t.Fatalf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}

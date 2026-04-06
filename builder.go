@@ -66,7 +66,7 @@ func (w *BuilderWhere) Build() (string, []any) {
 		args = append(args, args2...)
 		clauses = append(clauses, clause)
 	}
-	return strings.Join(clauses, " "+w.kind+" "), args
+	return "(" + strings.Join(clauses, " "+w.kind+" ") + ")", args
 }
 
 func (b *Builder) Set(column string, value any) *Builder {
