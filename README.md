@@ -138,7 +138,7 @@ err = db.Model(Post{}).InnerRelation(User{}).Scan(&posts)
 
 ### Free joins
 
-For joins not tied to declared relations, use `UnsafeJoin`. The alias is the model name.
+For joins not tied to declared relations, use `UnsafeJoin`. The alias is the model name. All fields of each joined model are automatically added to the `SELECT` — use `SelectFrom` or `SelectAllFrom` to restrict which fields are selected.
 
 ```go
 var results []UserWorkPerExcavator
