@@ -50,18 +50,22 @@ func (w *BuilderWhere) Build() (string, []any) {
 		return w.field, values
 	}
 	if w.kind == "COND" {
-		if w.operator == "IN" {
+		if w.operator == "IN" || w.operator == "NOT IN" {
 			values, _ := w.value.([]any)
 			placeholders := make([]string, len(values))
 			for i := range values {
 				placeholders[i] = "?"
 			}
-			return fmt.Sprintf("%s IN (%s)", w.field, strings.Join(placeholders, ", ")), values
+			return fmt.Sprintf("%s %s (%s)", w.field, w.operator, strings.Join(placeholders, ", ")), values
 		}
 		if w.operator == "IS NULL" || w.operator == "IS NOT NULL" {
 			return fmt.Sprintf("%s %s", w.field, w.operator), nil
 		}
 		return fmt.Sprintf("%s %s ?", w.field, w.operator), []any{w.value}
+	}
+	if w.kind == "NOT" {
+		inner, args := w.where[0].Build()
+		return "NOT (" + inner + ")", args
 	}
 	var clauses []string
 	var args []any
@@ -134,6 +138,10 @@ func In(field string, values []any) BuilderWhere {
 	return BuilderWhere{kind: "COND", field: field, operator: "IN", value: values}
 }
 
+func NotIn(field string, values []any) BuilderWhere {
+	return BuilderWhere{kind: "COND", field: field, operator: "NOT IN", value: values}
+}
+
 func IsNull(field string) BuilderWhere {
 	return BuilderWhere{kind: "COND", field: field, operator: "IS NULL"}
 }
@@ -152,6 +160,10 @@ func And(and ...BuilderWhere) BuilderWhere {
 
 func Or(or ...BuilderWhere) BuilderWhere {
 	return BuilderWhere{kind: "OR", where: or}
+}
+
+func Not(cond BuilderWhere) BuilderWhere {
+	return BuilderWhere{kind: "NOT", where: []BuilderWhere{cond}}
 }
 
 func (b *Builder) InnerRelation(model any) *Builder {
