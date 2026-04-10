@@ -45,6 +45,10 @@ type builderJoin struct {
 }
 
 func (w *BuilderWhere) Build() (string, []any) {
+	if w.kind == "RAW" {
+		values, _ := w.value.([]any)
+		return w.field, values
+	}
 	if w.kind == "COND" {
 		if w.operator == "IN" {
 			values, _ := w.value.([]any)
@@ -136,6 +140,10 @@ func IsNull(field string) BuilderWhere {
 
 func IsNotNull(field string) BuilderWhere {
 	return BuilderWhere{kind: "COND", field: field, operator: "IS NOT NULL"}
+}
+
+func UnsafeWhere(sql string, args ...any) BuilderWhere {
+	return BuilderWhere{kind: "RAW", field: sql, value: args}
 }
 
 func And(and ...BuilderWhere) BuilderWhere {
