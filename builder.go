@@ -464,8 +464,10 @@ func (b *Builder) buildScanTargets(dest reflect.Value, destTable *tableInfo, col
 	colToPtr := make(map[string]any)
 
 	for _, fi := range destTable.Fields {
-		colToPtr[fi.Column] = &nullProxy{dest.FieldByName(fi.Name)}
-		colToPtr[destTable.ModelName+"__"+fi.Column] = &nullProxy{dest.FieldByName(fi.Name)}
+		proxy := &nullProxy{dest.FieldByName(fi.Name)}
+		colToPtr[fi.Name] = proxy
+		colToPtr[fi.Column] = proxy
+		colToPtr[destTable.ModelName+"__"+fi.Column] = proxy
 	}
 
 	for _, rel := range destTable.Relations {
