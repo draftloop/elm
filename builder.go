@@ -190,6 +190,12 @@ func (b *Builder) UnsafeJoin(kind string, model any, on string) *Builder {
 	return b
 }
 
+func (b *Builder) UnsafeJoinAs(kind string, model any, alias string, on string) *Builder {
+	table := scanAndCacheStruct(model)
+	b.relations = append(b.relations, builderJoin{kind: kind, table: table, alias: alias, on: on})
+	return b
+}
+
 func (b *Builder) SelectFrom(model any, fields ...string) *Builder {
 	if b.err != nil {
 		return b
@@ -206,10 +212,34 @@ func (b *Builder) SelectFrom(model any, fields ...string) *Builder {
 	return b
 }
 
+func (b *Builder) SelectFromAs(model any, alias string, fields ...string) *Builder {
+	if b.err != nil {
+		return b
+	}
+	table := scanAndCacheStruct(model)
+	for _, field := range fields {
+		fi, ok := table.FieldsByName[field]
+		if !ok {
+			b.err = fmt.Errorf("elm: SelectFrom: field %q not found on %s", field, alias)
+			return b
+		}
+		b.selects = append(b.selects, fmt.Sprintf("%s.%s AS %s", alias, fi.Column, alias+"__"+fi.Column))
+	}
+	return b
+}
+
 func (b *Builder) SelectAllFrom(model any) *Builder {
 	table := scanAndCacheStruct(model)
 	for _, fi := range table.Fields {
 		b.selects = append(b.selects, fmt.Sprintf("%s.%s AS %s", table.ModelName, fi.Column, table.ModelName+"__"+fi.Column))
+	}
+	return b
+}
+
+func (b *Builder) SelectAllFromAs(model any, alias string) *Builder {
+	table := scanAndCacheStruct(model)
+	for _, fi := range table.Fields {
+		b.selects = append(b.selects, fmt.Sprintf("%s.%s AS %s", alias, fi.Column, alias+"__"+fi.Column))
 	}
 	return b
 }

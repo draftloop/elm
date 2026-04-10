@@ -140,7 +140,7 @@ err = db.Model(Post{}).InnerRelation(User{}).Scan(&posts)
 
 ### Free joins
 
-For joins not tied to declared relations, use `UnsafeJoin`. The alias is the model name. All fields of each joined model are automatically added to the `SELECT` — use `SelectFrom` or `SelectAllFrom` to restrict which fields are selected.
+For joins not tied to declared relations, use `UnsafeJoin`. The SQL alias defaults to the model name. All fields of each joined model are automatically added to the `SELECT` — use `SelectFrom` or `SelectAllFrom` to restrict which fields are selected.
 
 ```go
 var results []UserWorkPerExcavator
@@ -150,12 +150,14 @@ err = db.Model(WorkHour{}).
     Scan(&results)
 ```
 
+Use `UnsafeJoinAs` to set a custom SQL alias — required when the same model is joined more than once, or when the scan destination field name differs from the model name.
+
 ### Scan destination struct
 
 When scanning into a struct, fields are classified as follows:
 
 - A scalar field (`int64`, `string`, `time.Time`, …) maps to the column matching its snake_case name.
-- A nested struct field (`T` or `*T`) is treated as a relation and maps to columns prefixed with `ModelName__` (e.g. `Excavator__id`, `Excavator__registration_number`).
+- A nested struct field (`T` or `*T`) is treated as a relation and maps to columns prefixed with `<alias>__`, where alias is the model name by default or the custom alias set via `UnsafeJoinAs` / `SelectAllFromAs` / `SelectFromAs` (e.g. `MostUsedExcavator__id`).
 - A `*T` relation field is set to `nil` after the scan if the joined row has a zero ID (i.e. no match).
 - A `T` relation field is never nil — use it only when the join is guaranteed to return a row.
 
@@ -191,6 +193,8 @@ err = db.Model(WorkHour{}).
     Scan(&results)
 ```
 
+Use `SelectFromAs` / `SelectAllFromAs` when a custom SQL alias is needed (e.g. with `UnsafeJoinAs` or `LeftRelation` where the field name differs from the model name).
+
 ### Group by
 
 ```go
@@ -215,7 +219,7 @@ row := db.QueryRow("SELECT COUNT(*) FROM users")
 
 ## Limitations
 
-- `UnsafeSelect`, `UnsafeOrderBy`, `UnsafeGroupBy`, and `UnsafeJoin` accept raw strings — do not use with user input.
+- `UnsafeSelect`, `UnsafeOrderBy`, `UnsafeGroupBy`, `UnsafeJoin`, and `UnsafeJoinAs` accept raw strings — do not use with user input.
 - `ID` field must be an integer type.
 - `[]*T` slice destinations are not supported — use `[]T` instead.
 - Transactions are not yet supported.
