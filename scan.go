@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -25,7 +26,10 @@ func reflectRealValueOf(v any) reflect.Value {
 	return t
 }
 
-var structCache = make(map[reflect.Type]*tableInfo)
+var (
+	structCache   = make(map[reflect.Type]*tableInfo)
+	structCacheMu sync.RWMutex
+)
 
 type tableInfo struct {
 	Type            reflect.Type
@@ -57,7 +61,9 @@ func getStructOrNil(v any) *tableInfo {
 	if t.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("elm: %T is not a struct", v))
 	}
+	structCacheMu.RLock()
 	info, ok := structCache[t]
+	structCacheMu.RUnlock()
 	if ok {
 		return info
 	}
@@ -70,7 +76,9 @@ func scanStruct(v any, cache bool) *tableInfo {
 		panic(fmt.Sprintf("elm: %T is not a struct", v))
 	}
 
+	structCacheMu.RLock()
 	info, ok := structCache[t]
+	structCacheMu.RUnlock()
 	if ok {
 		return info
 	}
@@ -83,7 +91,6 @@ func scanStruct(v any, cache bool) *tableInfo {
 		FieldsByName:    make(map[string]*tableFieldInfo),
 		RelationsByName: make(map[string]*tableRelationInfo),
 	}
-	structCache[t] = info
 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -125,6 +132,16 @@ func scanStruct(v any, cache bool) *tableInfo {
 		info.Fields = append(info.Fields, fi)
 		info.FieldsByColumn[col] = &info.Fields[len(info.Fields)-1]
 		info.FieldsByName[f.Name] = &info.Fields[len(info.Fields)-1]
+	}
+
+	if cache {
+		structCacheMu.Lock()
+		if existing, ok := structCache[t]; ok {
+			structCacheMu.Unlock()
+			return existing
+		}
+		structCache[t] = info
+		structCacheMu.Unlock()
 	}
 
 	return info
@@ -191,11 +208,7 @@ type nullProxy struct {
 
 func (p *nullProxy) Scan(src any) error {
 	if src == nil {
-		if p.field.Kind() == reflect.Pointer {
-			p.field.Set(reflect.Zero(p.field.Type()))
-		} else {
-			p.field.Set(reflect.Zero(p.field.Type()))
-		}
+		p.field.Set(reflect.Zero(p.field.Type()))
 		return nil
 	}
 

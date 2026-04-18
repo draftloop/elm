@@ -60,7 +60,7 @@ type Post struct {
 | `Username`     | `username`       |
 | `ForeignKeyID` | `foreign_key_id` |
 
-Table names are derived from the struct name: `User` → `users`, `Status` → `statuses`.
+Table names are derived from the struct name in snake_case and pluralized: `User` → `users`, `Status` → `statuses`. Struct names should be singular.
 
 ### Save
 
@@ -118,11 +118,16 @@ elm.Lt("score", 100)
 elm.LtEq("score", 100)
 elm.Like("username", "ali%")
 elm.In("id", []any{1, 2, 3})
+elm.NotIn("id", []any{1, 2, 3})
 elm.IsNull("deleted_at")
 elm.IsNotNull("deleted_at")
 
+elm.Not(elm.Eq("status", "banned"))
+
 elm.And(elm.Eq("active", true), elm.Gt("age", 18))
 elm.Or(elm.Eq("role", "admin"), elm.Eq("role", "mod"))
+
+elm.UnsafeWhere("created_at > ?", someTime)
 ```
 
 ### Joins
@@ -195,6 +200,18 @@ err = db.Model(WorkHour{}).
 
 Use `SelectFromAs` / `SelectAllFromAs` when a custom SQL alias is needed (e.g. with `UnsafeJoinAs` or `LeftRelation` where the field name differs from the model name).
 
+### Update / Delete via builder
+
+```go
+// Update specific columns with a WHERE condition
+err = db.Model(User{}).Set("active", false).Where(elm.Eq("role", "banned")).Update()
+
+// Delete with a WHERE condition
+err = db.Model(User{}).Where(elm.Lt("created_at", cutoff)).Delete()
+```
+
+Both `Update` and `Delete` require at least one `Where()` condition. Use `UnsafeWhere("1=1")` to explicitly target all rows. Joins are not supported on `Update` and `Delete`.
+
 ### Group by
 
 ```go
@@ -220,6 +237,7 @@ row := db.QueryRow("SELECT COUNT(*) FROM users")
 ## Limitations
 
 - `UnsafeSelect`, `UnsafeOrderBy`, `UnsafeGroupBy`, `UnsafeJoin`, and `UnsafeJoinAs` accept raw strings — do not use with user input.
-- `ID` field must be an integer type.
+- `ID` field must be a non-pointer integer type (`int64`, `int`, …).
 - `[]*T` slice destinations are not supported — use `[]T` instead.
+- Joins are not supported on `Update` and `Delete`.
 - Transactions are not yet supported.

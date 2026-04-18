@@ -52,6 +52,12 @@ func (w *BuilderWhere) Build() (string, []any) {
 	if w.kind == "COND" {
 		if w.operator == "IN" || w.operator == "NOT IN" {
 			values, _ := w.value.([]any)
+			if len(values) == 0 {
+				if w.operator == "NOT IN" {
+					return "TRUE", nil
+				}
+				return "FALSE", nil
+			}
 			placeholders := make([]string, len(values))
 			for i := range values {
 				placeholders[i] = "?"
@@ -66,6 +72,12 @@ func (w *BuilderWhere) Build() (string, []any) {
 	if w.kind == "NOT" {
 		inner, args := w.where[0].Build()
 		return "NOT (" + inner + ")", args
+	}
+	if len(w.where) == 0 {
+		if w.kind == "AND" {
+			return "TRUE", nil
+		}
+		return "FALSE", nil
 	}
 	var clauses []string
 	var args []any
@@ -382,6 +394,9 @@ func (b *Builder) Scan(dests ...any) error {
 		limitClause,
 		offsetClause,
 	)
+	if b.err != nil {
+		return b.err
+	}
 
 	rows, err := b.elm.Query(query, whereArgs...)
 	if err != nil {
@@ -504,7 +519,7 @@ func (b *Builder) buildScanTargets(dest reflect.Value, destTable *tableInfo, col
 
 		relTable := getStructOrNil(reflect.New(rel.TableType).Elem().Interface())
 		if relTable == nil {
-			panic(fmt.Sprintf("elm: relation type %s is not a registered struct", rel.TableType))
+			return nil, fmt.Errorf("elm: relation type %s is not a registered struct", rel.TableType)
 		}
 		for _, fi := range relTable.Fields {
 			colToPtr[rel.ModelRelationName+"__"+fi.Column] = &nullProxy{relationFieldValue.FieldByName(fi.Name)}
@@ -553,7 +568,8 @@ func (b *Builder) buildJoins() string {
 		if onClause == "" {
 			fk, ok := b.table.FieldsByName[rel.alias+"ID"]
 			if !ok {
-				panic(fmt.Sprintf("elm: %s has no field %sID required for join on %s", b.table.ModelName, rel.alias, rel.table.TableName))
+				b.err = fmt.Errorf("elm: %s has no field %sID required for join on %s", b.table.ModelName, rel.alias, rel.table.TableName)
+				return ""
 			}
 			onClause = fmt.Sprintf("%s = %s", rel.alias+".ID", b.table.ModelName+"."+fk.Column)
 		}
@@ -598,6 +614,9 @@ func (b *Builder) Update(affected ...*int64) error {
 	if len(b.set) == 0 {
 		return fmt.Errorf("elm: Update requires at least one Set()")
 	}
+	if len(b.where) == 0 {
+		return fmt.Errorf("elm: Update requires at least one Where() condition; use UnsafeWhere(\"1=1\") to update all rows")
+	}
 
 	setClauses := make([]string, len(b.set))
 	args := make([]any, len(b.set))
@@ -631,6 +650,9 @@ func (b *Builder) Update(affected ...*int64) error {
 func (b *Builder) Delete(affected ...*int64) error {
 	if b.err != nil {
 		return b.err
+	}
+	if len(b.where) == 0 {
+		return fmt.Errorf("elm: Delete requires at least one Where() condition; use UnsafeWhere(\"1=1\") to delete all rows")
 	}
 	whereClause, whereArgs := b.buildWhere()
 

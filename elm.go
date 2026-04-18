@@ -253,13 +253,13 @@ func (o *Elm) Save(entity any) error {
 	}
 
 	id := val.FieldByName(idField.Name)
+	if !id.CanInt() {
+		return fmt.Errorf("elm: Save: ID field must be a non-pointer integer type, got %s", id.Type())
+	}
 	if id.IsZero() {
 		var insertedID int64
 		if err := o.Model(entity).SetFromStruct(entity, model).Insert(&insertedID); err != nil {
 			return err
-		}
-		if !id.CanInt() {
-			return fmt.Errorf("elm: Save: ID field must be an integer type, got %s", id.Type())
 		}
 		id.SetInt(insertedID)
 		return nil
