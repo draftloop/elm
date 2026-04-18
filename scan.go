@@ -71,6 +71,10 @@ func getStructOrNil(v any) *tableInfo {
 }
 
 func scanStruct(v any, cache bool) *tableInfo {
+	return scanStructInternal(v, cache, make(map[reflect.Type]*tableInfo))
+}
+
+func scanStructInternal(v any, cache bool, visited map[reflect.Type]*tableInfo) *tableInfo {
 	t := reflectRealTypeOf(v)
 	if t.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("elm: %T is not a struct", v))
@@ -83,6 +87,11 @@ func scanStruct(v any, cache bool) *tableInfo {
 		return info
 	}
 
+	// Break cycles for non-cached calls.
+	if info, ok := visited[t]; ok {
+		return info
+	}
+
 	info = &tableInfo{
 		Type:            t,
 		ModelName:       t.Name(),
@@ -90,6 +99,19 @@ func scanStruct(v any, cache bool) *tableInfo {
 		FieldsByColumn:  make(map[string]*tableFieldInfo),
 		FieldsByName:    make(map[string]*tableFieldInfo),
 		RelationsByName: make(map[string]*tableRelationInfo),
+	}
+
+	// Register early to break cycles before recursing into relations.
+	if cache {
+		structCacheMu.Lock()
+		if existing, ok := structCache[t]; ok {
+			structCacheMu.Unlock()
+			return existing
+		}
+		structCache[t] = info
+		structCacheMu.Unlock()
+	} else {
+		visited[t] = info
 	}
 
 	for i := 0; i < t.NumField(); i++ {
@@ -110,7 +132,7 @@ func scanStruct(v any, cache bool) *tableInfo {
 			}
 
 			relation := tableRelationInfo{
-				TableType:         scanStruct(reflect.New(relType).Interface(), cache).Type,
+				TableType:         scanStructInternal(reflect.New(relType).Interface(), cache, visited).Type,
 				ModelRelationName: f.Name,
 				Nullable:          nullable,
 			}
@@ -132,16 +154,6 @@ func scanStruct(v any, cache bool) *tableInfo {
 		info.Fields = append(info.Fields, fi)
 		info.FieldsByColumn[col] = &info.Fields[len(info.Fields)-1]
 		info.FieldsByName[f.Name] = &info.Fields[len(info.Fields)-1]
-	}
-
-	if cache {
-		structCacheMu.Lock()
-		if existing, ok := structCache[t]; ok {
-			structCacheMu.Unlock()
-			return existing
-		}
-		structCache[t] = info
-		structCacheMu.Unlock()
 	}
 
 	return info
