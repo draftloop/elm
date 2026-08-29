@@ -43,6 +43,14 @@ func (o *Elm) log(query string, args []any, duration time.Duration, err error) {
 	}
 }
 
+func (o *Elm) quote(s string) string {
+	quoteChar := "`"
+	if o.isPostgres {
+		quoteChar = "\""
+	}
+	return quoteChar + s + quoteChar
+}
+
 func isPostgresDriver(driver string) bool {
 	return driver == "postgres" || driver == "pgx" || strings.HasPrefix(driver, "pgx/")
 }

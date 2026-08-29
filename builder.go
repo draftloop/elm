@@ -309,14 +309,14 @@ func (b *Builder) Insert(insertedID ...*int64) error {
 	args := make([]any, len(b.set))
 
 	for i, s := range b.set {
-		columns[i] = s.column
+		columns[i] = b.elm.quote(s.column)
 		placeholders[i] = "?"
 		args[i] = s.value
 	}
 
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s)",
-		b.table.TableName,
+		b.elm.quote(b.table.TableName),
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
@@ -398,8 +398,8 @@ func (b *Builder) Scan(dests ...any) error {
 	whereClause, whereArgs := b.buildWhere()
 	query := fmt.Sprintf("SELECT %s FROM %s %s%s%s%s%s%s%s",
 		b.buildSelect(),
-		b.table.TableName,
-		b.table.ModelName,
+		b.elm.quote(b.table.TableName),
+		b.elm.quote(b.table.ModelName),
 		b.buildJoins(),
 		whereClause,
 		b.buildGroupBy(),
@@ -558,12 +558,12 @@ func (b *Builder) buildSelect() string {
 
 	var parts []string
 	for _, f := range b.table.Fields {
-		parts = append(parts, fmt.Sprintf("%s.%s AS %s", b.table.ModelName, f.Column, b.table.ModelName+"__"+f.Column))
+		parts = append(parts, fmt.Sprintf("%s.%s AS %s", b.elm.quote(b.table.ModelName), b.elm.quote(f.Column), b.elm.quote(b.table.ModelName+"__"+f.Column)))
 	}
 	if len(b.relations) != 0 {
 		for _, rel := range b.relations {
 			for _, f := range rel.table.Fields {
-				parts = append(parts, fmt.Sprintf("%s.%s AS %s", rel.alias, f.Column, rel.alias+"__"+f.Column))
+				parts = append(parts, fmt.Sprintf("%s.%s AS %s", b.elm.quote(rel.alias), b.elm.quote(f.Column), b.elm.quote(rel.alias+"__"+f.Column)))
 			}
 		}
 	}
@@ -584,9 +584,9 @@ func (b *Builder) buildJoins() string {
 				b.err = fmt.Errorf("elm: %s has no field %sID required for join on %s", b.table.ModelName, rel.alias, rel.table.TableName)
 				return ""
 			}
-			onClause = fmt.Sprintf("%s = %s", rel.alias+".ID", b.table.ModelName+"."+fk.Column)
+			onClause = fmt.Sprintf("%s = %s", b.elm.quote(rel.alias)+"."+b.elm.quote("id"), b.elm.quote(b.table.ModelName)+"."+b.elm.quote(fk.Column))
 		}
-		parts = append(parts, fmt.Sprintf(" %s JOIN %s %s ON %s", rel.kind, rel.table.TableName, rel.alias, onClause))
+		parts = append(parts, fmt.Sprintf(" %s JOIN %s %s ON %s", rel.kind, b.elm.quote(rel.table.TableName), b.elm.quote(rel.alias), onClause))
 	}
 	return strings.Join(parts, "")
 }
@@ -635,7 +635,7 @@ func (b *Builder) Update(affected ...*int64) error {
 	args := make([]any, len(b.set))
 
 	for i, s := range b.set {
-		setClauses[i] = fmt.Sprintf("%s = ?", s.column)
+		setClauses[i] = fmt.Sprintf("%s = ?", b.elm.quote(s.column))
 		args[i] = s.value
 	}
 
@@ -644,7 +644,7 @@ func (b *Builder) Update(affected ...*int64) error {
 
 	query := fmt.Sprintf(
 		"UPDATE %s SET %s%s",
-		b.table.TableName,
+		b.elm.quote(b.table.TableName),
 		strings.Join(setClauses, ", "),
 		whereClause,
 	)
@@ -669,7 +669,7 @@ func (b *Builder) Delete(affected ...*int64) error {
 	}
 	whereClause, whereArgs := b.buildWhere()
 
-	query := fmt.Sprintf("DELETE FROM %s%s", b.table.TableName, whereClause)
+	query := fmt.Sprintf("DELETE FROM %s%s", b.elm.quote(b.table.TableName), whereClause)
 
 	result, err := b.elm.Exec(query, whereArgs...)
 	if err != nil {
