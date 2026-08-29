@@ -87,7 +87,6 @@ func scanStructInternal(v any, cache bool, visited map[reflect.Type]*tableInfo) 
 		return info
 	}
 
-	// Break cycles for non-cached calls.
 	if info, ok := visited[t]; ok {
 		return info
 	}
@@ -101,7 +100,6 @@ func scanStructInternal(v any, cache bool, visited map[reflect.Type]*tableInfo) 
 		RelationsByName: make(map[string]*tableRelationInfo),
 	}
 
-	// Register early to break cycles before recursing into relations.
 	if cache {
 		structCacheMu.Lock()
 		if existing, ok := structCache[t]; ok {
@@ -249,7 +247,6 @@ func convertAssign(dest, src any) error {
 		rv.Set(sv.Convert(rv.Type()))
 		return nil
 	}
-	// Handle integer → bool conversion
 	if sv.IsValid() && rv.Kind() == reflect.Bool {
 		switch sv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

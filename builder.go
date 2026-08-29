@@ -321,15 +321,28 @@ func (b *Builder) Insert(insertedID ...*int64) error {
 		strings.Join(placeholders, ", "),
 	)
 
-	result, err := b.elm.Exec(query, args...)
-	if err != nil {
-		return err
+	if b.elm.isPostgres && len(insertedID) > 0 && insertedID[0] != nil {
+		query += " RETURNING id"
+
+		row := b.elm.QueryRow(query, args...)
+		if err := row.Scan(insertedID[0]); err != nil {
+			return err
+		}
+	} else {
+		result, err := b.elm.Exec(query, args...)
+		if err != nil {
+			return err
+		}
+
+		if len(insertedID) > 0 && insertedID[0] != nil {
+			*insertedID[0], err = result.LastInsertId()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
-	if len(insertedID) > 0 && insertedID[0] != nil {
-		*insertedID[0], err = result.LastInsertId()
-	}
-	return err
+	return nil
 }
 
 func (b *Builder) Scan(dests ...any) error {
@@ -458,13 +471,13 @@ func (b *Builder) Scan(dests ...any) error {
 			return nil
 		}
 
-		outer := reflect.ValueOf(dests[0]) // **test.User (ou *int64, etc.)
-		dest := outer.Elem()               // *test.User (ce que pointe &user3)
+		outer := reflect.ValueOf(dests[0])
+		dest := outer.Elem()
 
 		for dest.Kind() == reflect.Pointer {
 			if dest.IsNil() {
 				newVal := reflect.New(dest.Type().Elem())
-				outer.Elem().Set(newVal) // écrit dans *(&user3) = user3 ✅
+				outer.Elem().Set(newVal)
 				dest = newVal
 			}
 			dest = dest.Elem()
