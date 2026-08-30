@@ -43,6 +43,7 @@ The logger can also be set after opening the connection with `db.SetLogger(...)`
 ### Define a model
 
 Fields are mapped to snake_case columns automatically. A pointer field is treated as nullable. A nested struct field is treated as a relation.
+By default, the `ID` field is used as the primary key. You can use another non-pointer field as primary key with `elm:"primary_key"`.
 
 ```go
 type Post struct {
@@ -52,11 +53,17 @@ type Post struct {
 
     User *User
 }
+
+type Client struct {
+    UUID string `elm:"primary_key"`
+	Name string
+}
 ```
 
 | Go field       | SQL column       |
 |----------------|------------------|
 | `ID`           | `id`             |
+| `UUID`         | `uuid`           |
 | `Username`     | `username`       |
 | `ForeignKeyID` | `foreign_key_id` |
 
@@ -64,7 +71,9 @@ Table names are derived from the struct name in snake_case and pluralized: `User
 
 ### Save
 
-`Save` inserts or updates based on whether `ID` is zero.
+`Save` requires a pointer.
+By default, `ID` is used as the primary key. If `ID` is an integer and is zero, `Save` inserts the row and writes the generated ID back to the struct.
+Custom primary keys can be declared with `elm:"primary_key"`. Non-integer primary keys, such as UUID strings, must be set before calling `Save`.
 
 ```go
 user := &User{Username: "alice"}
@@ -74,8 +83,6 @@ err = db.Save(user) // INSERT — sets user.ID
 user.Username = "bob"
 err = db.Save(user) // UPDATE WHERE id = 1
 ```
-
-`Save` requires a pointer.
 
 ### Delete
 
@@ -237,7 +244,7 @@ row := db.QueryRow("SELECT COUNT(*) FROM users")
 ## Limitations
 
 - `UnsafeSelect`, `UnsafeOrderBy`, `UnsafeGroupBy`, `UnsafeJoin`, and `UnsafeJoinAs` accept raw strings — do not use with user input.
-- `ID` field must be a non-pointer integer type (`int64`, `int`, …).
+- Primary keys must be non-pointer fields. `ID` is used by default; use `elm:"primary_key"` to select another field. Non-integer primary keys must be generated before calling `Save`.
 - `[]*T` slice destinations are not supported — use `[]T` instead.
 - Joins are not supported on `Update` and `Delete`.
 - Transactions are not yet supported.

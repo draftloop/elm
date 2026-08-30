@@ -252,30 +252,51 @@ func (o *Elm) Save(entity any) error {
 	}
 
 	model := scanAndCacheStruct(entity)
+	if model.PrimaryField == nil {
+		return fmt.Errorf("elm: Save requires a primary key field named ID or tagged with `elm:\"primary_key\"`")
+	}
 
 	val := reflectRealValueOf(entity)
 
-	idField, ok := model.FieldsByName["ID"]
-	if !ok {
-		return fmt.Errorf("elm: Save requires a struct with an ID field")
+	primaryKey := val.FieldByName(model.PrimaryField.Name)
+	if primaryKey.Kind() == reflect.Pointer {
+		return fmt.Errorf("elm: Save: primary key field must be a non-pointer type, got %s", primaryKey.Type())
 	}
-
-	id := val.FieldByName(idField.Name)
-	if !id.CanInt() {
-		return fmt.Errorf("elm: Save: ID field must be a non-pointer integer type, got %s", id.Type())
-	}
-	if id.IsZero() {
-		var insertedID int64
-		if err := o.Model(entity).SetFromStruct(entity, model).Insert(&insertedID); err != nil {
-			return err
+	if primaryKey.IsZero() {
+		if primaryKey.Kind() >= reflect.Int && primaryKey.Kind() <= reflect.Int64 {
+			var insertedID int64
+			if err := o.Model(entity).SetFromStruct(entity, model).Insert(&insertedID); err != nil {
+				return err
+			}
+			primaryKey.SetInt(insertedID)
+			return nil
 		}
-		id.SetInt(insertedID)
-		return nil
+
+		return fmt.Errorf("elm: Save: non-integer primary key %s must be set before insert", model.PrimaryField.Name)
 	}
 
-	return o.Model(entity).SetFromStruct(entity, model).
-		Where(Eq("id", id.Interface())).
-		Update()
+	var exists bool
+	err := o.QueryRow(
+		fmt.Sprintf(
+			"SELECT EXISTS(SELECT 1 FROM %s WHERE %s = ?)",
+			o.quote(model.TableName),
+			o.quote(model.PrimaryField.Column),
+		),
+		primaryKey.Interface(),
+	).Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return o.Model(entity).SetFromStruct(entity, model).
+			Where(Eq(model.PrimaryField.Column, primaryKey.Interface())).
+			Update()
+	}
+
+	return o.Model(entity).
+		SetFromStruct(entity, model, true).
+		Insert()
 }
 
 func (o *Elm) Model(model any) *Builder {
@@ -292,21 +313,22 @@ func (o *Elm) Delete(entity any) error {
 	}
 
 	model := scanAndCacheStruct(entity)
+	if model.PrimaryField == nil {
+		return fmt.Errorf("elm: Delete requires a primary key field named ID or tagged with `elm:\"primary_key\"`")
+	}
 
 	val := reflectRealValueOf(entity)
 
-	idField, ok := model.FieldsByName["ID"]
-	if !ok {
-		return fmt.Errorf("elm: Delete requires a struct with an ID field")
+	primaryKey := val.FieldByName(model.PrimaryField.Name)
+	if primaryKey.Kind() == reflect.Pointer {
+		return fmt.Errorf("elm: Delete: primary key field must be a non-pointer type, got %s", primaryKey.Type())
 	}
-
-	id := val.FieldByName(idField.Name)
-	if id.IsZero() {
-		return fmt.Errorf("elm: Delete requires a non-zero ID")
+	if primaryKey.IsZero() {
+		return fmt.Errorf("elm: Delete requires a non-zero primary key")
 	}
 
 	err := o.Model(entity).
-		Where(Eq("id", id.Interface())).
+		Where(Eq(model.PrimaryField.Column, primaryKey.Interface())).
 		Delete()
 	if err != nil {
 		return err

@@ -38,6 +38,7 @@ type tableInfo struct {
 	Fields          []tableFieldInfo
 	FieldsByColumn  map[string]*tableFieldInfo
 	FieldsByName    map[string]*tableFieldInfo
+	PrimaryField    *tableFieldInfo
 	Relations       []tableRelationInfo
 	RelationsByName map[string]*tableRelationInfo
 }
@@ -140,18 +141,30 @@ func scanStructInternal(v any, cache bool, visited map[reflect.Type]*tableInfo) 
 		}
 
 		col := toSnakeCase(f.Name)
+		tag := f.Tag.Get("elm")
 
 		fi := tableFieldInfo{
 			Name:      f.Name,
 			Column:    col,
 			Type:      f.Type,
 			Nullable:  f.Type.Kind() == reflect.Pointer,
-			IsPrimary: f.Name == "ID",
+			IsPrimary: f.Name == "ID" || tag == "primary_key",
+		}
+
+		if fi.IsPrimary {
+			if info.PrimaryField != nil {
+				panic(fmt.Sprintf("elm: %s has multiple primary keys", t.Name()))
+			}
+			info.PrimaryField = &fi
 		}
 
 		info.Fields = append(info.Fields, fi)
 		info.FieldsByColumn[col] = &info.Fields[len(info.Fields)-1]
 		info.FieldsByName[f.Name] = &info.Fields[len(info.Fields)-1]
+
+		if fi.IsPrimary {
+			info.PrimaryField = &info.Fields[len(info.Fields)-1]
+		}
 	}
 
 	return info

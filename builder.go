@@ -94,11 +94,13 @@ func (b *Builder) Set(column string, value any) *Builder {
 	return b
 }
 
-func (b *Builder) SetFromStruct(value any, table *tableInfo) *Builder {
+func (b *Builder) SetFromStruct(value any, table *tableInfo, includePrimary ...bool) *Builder {
 	v := reflectRealValueOf(value)
 
+	shouldIncludePrimary := len(includePrimary) > 0 && includePrimary[0]
+
 	for _, f := range table.Fields {
-		if f.IsPrimary {
+		if f.IsPrimary && !shouldIncludePrimary {
 			continue
 		}
 		b.set = append(b.set, struct {
@@ -322,23 +324,27 @@ func (b *Builder) Insert(insertedID ...*int64) error {
 	)
 
 	if b.elm.isPostgres && len(insertedID) > 0 && insertedID[0] != nil {
-		query += " RETURNING id"
+		primaryKey := b.table.PrimaryField
+		if primaryKey.Type.Kind() >= reflect.Int && primaryKey.Type.Kind() <= reflect.Int64 {
+			query += " RETURNING " + b.elm.quote(primaryKey.Column)
 
-		row := b.elm.QueryRow(query, args...)
-		if err := row.Scan(insertedID[0]); err != nil {
-			return err
-		}
-	} else {
-		result, err := b.elm.Exec(query, args...)
-		if err != nil {
-			return err
-		}
-
-		if len(insertedID) > 0 && insertedID[0] != nil {
-			*insertedID[0], err = result.LastInsertId()
-			if err != nil {
+			row := b.elm.QueryRow(query, args...)
+			if err := row.Scan(insertedID[0]); err != nil {
 				return err
 			}
+			return nil
+		}
+	}
+
+	result, err := b.elm.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	if !b.elm.isPostgres && len(insertedID) > 0 && insertedID[0] != nil {
+		*insertedID[0], err = result.LastInsertId()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -427,8 +433,13 @@ func (b *Builder) Scan(dests ...any) error {
 			if rel.Nullable {
 				fieldVal := dest.FieldByName(rel.ModelRelationName)
 				if !fieldVal.IsNil() {
-					idField := fieldVal.Elem().FieldByName("ID")
-					if !idField.IsValid() || idField.IsZero() {
+					relTable := getStructOrNil(reflect.New(rel.TableType).Elem().Interface())
+					if relTable == nil || relTable.PrimaryField == nil {
+						continue
+					}
+
+					primaryKey := fieldVal.Elem().FieldByName(relTable.PrimaryField.Name)
+					if !primaryKey.IsValid() || primaryKey.IsZero() {
 						fieldVal.Set(reflect.Zero(reflect.PointerTo(rel.TableType)))
 					}
 				}
@@ -579,12 +590,26 @@ func (b *Builder) buildJoins() string {
 	for _, rel := range b.relations {
 		onClause := rel.on
 		if onClause == "" {
-			fk, ok := b.table.FieldsByName[rel.alias+"ID"]
-			if !ok {
-				b.err = fmt.Errorf("elm: %s has no field %sID required for join on %s", b.table.ModelName, rel.alias, rel.table.TableName)
+			primaryField := rel.table.PrimaryField
+			if primaryField == nil {
+				b.err = fmt.Errorf("elm: %s has no primary key required for join on %s", rel.table.ModelName, rel.table.TableName)
 				return ""
 			}
-			onClause = fmt.Sprintf("%s = %s", b.elm.quote(rel.alias)+"."+b.elm.quote("id"), b.elm.quote(b.table.ModelName)+"."+b.elm.quote(fk.Column))
+
+			fkName := rel.alias + primaryField.Name
+			fk, ok := b.table.FieldsByName[fkName]
+			if !ok {
+				b.err = fmt.Errorf("elm: %s has no field %s required for join on %s", b.table.ModelName, fkName, rel.table.TableName)
+				return ""
+			}
+
+			onClause = fmt.Sprintf(
+				"%s.%s = %s.%s",
+				b.elm.quote(rel.alias),
+				b.elm.quote(primaryField.Column),
+				b.elm.quote(b.table.ModelName),
+				b.elm.quote(fk.Column),
+			)
 		}
 		parts = append(parts, fmt.Sprintf(" %s JOIN %s %s ON %s", rel.kind, b.elm.quote(rel.table.TableName), b.elm.quote(rel.alias), onClause))
 	}
