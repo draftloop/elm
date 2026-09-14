@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"uuid"
 )
 
 func reflectRealTypeOf(v any) reflect.Type {
@@ -251,6 +252,15 @@ func convertAssign(dest, src any) error {
 	}
 	rv := reflect.ValueOf(dest).Elem()
 	sv := reflect.ValueOf(src)
+
+	if s, ok := src.(string); ok && rv.Type() == reflect.TypeOf(uuid.UUID{}) {
+		u, err := uuid.Parse(s)
+		if err != nil {
+			return fmt.Errorf("elm: invalid uuid %q: %w", s, err)
+		}
+		rv.Set(reflect.ValueOf(u))
+		return nil
+	}
 
 	if sv.IsValid() && sv.Type().AssignableTo(rv.Type()) {
 		rv.Set(sv)
