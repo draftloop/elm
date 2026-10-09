@@ -46,9 +46,10 @@ func (o *Elm) log(query string, args []any, duration time.Duration, err error) {
 func (o *Elm) quote(s string) string {
 	quoteChar := "`"
 	if o.isPostgres {
-		quoteChar = "\""
+		quoteChar = `"`
 	}
-	return quoteChar + s + quoteChar
+	escaped := strings.ReplaceAll(s, quoteChar, quoteChar+quoteChar)
+	return quoteChar + escaped + quoteChar
 }
 
 func isPostgresDriver(driver string) bool {
